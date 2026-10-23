@@ -1,0 +1,549 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>소상공식 운영 대시보드</title>
+<script>
+/* ════════════════════════════════════════════════════════════════════
+   DATA — 이 객체 하나만 고치면 화면 전체가 바뀝니다.
+   날짜는 "YYYY-MM-DD", 금액은 숫자(원), 모르는 값은 "" 로 두면 화면에 「미확보」로 나옵니다.
+   ════════════════════════════════════════════════════════════════════ */
+const DATA = {
+  meta: {
+    팀명: "든든컴퍼니",
+    아이템: "소상공식 / 키워드5",
+    시작일: "2026-10-20",        // 주차별 일정이 시작하는 날
+    마감일: "2026-11-25",        // 최종 사업계획서 제출일 (D-day 기준)
+    총예산: 2000000,             // 지원금 (원). 인정 항목은 운영사 규정 확인
+    건당한도: 100000,            // 1회 10만원 미만 집행 규칙 — 이 금액 이상이면 경고
+    기준일: "2026-10-22",        // 오늘로 볼 날짜. "" 로 두면 컴퓨터 날짜를 씁니다
+    샘플데이터: true             // true 면 맨 위에 「예시 데이터」 표시. 실제 값으로 다 바꾸면 false
+  },
+
+  // 팀원 — id 는 tasks·expenses 의 담당 칸에 씁니다. 이름은 예시입니다.
+  team: [
+    { id: "t1", 이름: "김보민", 역할: "대표 · 총괄", 담당영역: ["사업계획서", "멘토링", "예산 정산"] },
+    // 고문 — 이름·자문 분야를 모르면 "" / [] 로 두면 화면에 「미확보」
+    { id: "a1", 이름: "", 역할: "고문", 담당영역: [] },
+    { id: "t2", 이름: "팀원 A · 미확정", 역할: "AI 자동화", 담당영역: ["MVP 웹", "엔진", "원가표"] },
+    { id: "t3", 이름: "팀원 B · 미확정", 역할: "네이버 채널 · 콘텐츠", 담당영역: ["파일럿 세팅", "측정", "운영 체크리스트"] }
+  ],
+
+  // 파트너사 — 유형은 B2G / B2B 등. 협력내용·연락 담당을 모르면 "" 로 두면 「미확보」
+  partners: [
+    { 이름: "골목사무국", 유형: "B2G", 협력내용: "", 연락담당: "t1", 메모: "" }
+  ],
+
+  // 할 일 — 상태는 "대기" | "진행" | "완료" | "지연". 마감이 기준일보다 지났는데 완료가 아니면 자동으로 지연 경고
+  tasks: [
+    { id: "k0", 제목: "OT 참가 (대표 단독)", 담당: "t1", 상태: "완료", 시작: "2026-10-21", 마감: "2026-10-21", 산출물: "OT 노트", 메모: "" },
+    { id: "k1", 제목: "측정 양식 재설계 (노출 칸 / 결과 칸)", 담당: "t3", 상태: "진행", 시작: "2026-10-15", 마감: "2026-10-21", 산출물: "측정 양식", 메모: "크립톤 지적 2번 대응" },
+    { id: "k2", 제목: "키워드5 데모 웹 (10문항 → 키워드 5개)", 담당: "t2", 상태: "진행", 시작: "2026-10-20", 마감: "2026-11-06", 산출물: "MVP 웹", 메모: "" },
+    { id: "k3", 제목: "원가표 1장 (API · 검수 · 세팅 시간)", 담당: "t2", 상태: "대기", 시작: "2026-10-27", 마감: "2026-11-07", 산출물: "원가표", 메모: "크립톤 지적 3번 대응" },
+    { id: "k4", 제목: "멘토링 1회차 자료 준비", 담당: "t1", 상태: "진행", 시작: "2026-10-22", 마감: "2026-10-29", 산출물: "멘토링 자료", 메모: "" },
+    { id: "k5", 제목: "파일럿 매장 모집 · 사전 진단", 담당: "t3", 상태: "진행", 시작: "2026-10-22", 마감: "2026-11-04", 산출물: "진단 리포트", 메모: "" },
+    { id: "k6", 제목: "파일럿 세팅 · 1차 측정", 담당: "t3", 상태: "대기", 시작: "2026-11-02", 마감: "2026-11-13", 산출물: "측정 기록", 메모: "" },
+    { id: "k7", 제목: "운영 체크리스트 (대표 없이 같은 결과)", 담당: "t3", 상태: "대기", 시작: "2026-11-09", 마감: "2026-11-18", 산출물: "운영 체크리스트", 메모: "크립톤 지적 4번 대응" },
+    { id: "k8", 제목: "IP 검토 (상표 · 업종 사전 DB)", 담당: "t1", 상태: "대기", 시작: "2026-11-03", 마감: "2026-11-17", 산출물: "IP 검토 메모", 메모: "크립톤 지적 1번 대응" },
+    { id: "k9", 제목: "최종 사업계획서 작성", 담당: "t1", 상태: "대기", 시작: "2026-11-09", 마감: "2026-11-24", 산출물: "최종 사업계획서", 메모: "" },
+    { id: "k10", 제목: "지원금 정산 증빙 정리", 담당: "t1", 상태: "대기", 시작: "2026-11-16", 마감: "2026-11-21", 산출물: "정산 증빙 묶음", 메모: "" },
+    { id: "k11", 제목: "업종 사전 1차 (거부어 목록)", 담당: "t2", 상태: "대기", 시작: "2026-11-09", 마감: "2026-11-20", 산출물: "업종 사전", 메모: "" },
+    { id: "k12", 제목: "랜딩 페이지 1차본", 담당: "t2", 상태: "완료", 시작: "2026-10-16", 마감: "2026-10-22", 산출물: "랜딩 페이지", 메모: "" }
+  ],
+
+  // 멘토링 — 확정일이 "" 이면 「일정 미확정」 경고. 일정 그림에는 확정일(없으면 희망일, 점선)로 표시
+  mentoring: [
+    { 회차: 1, 희망일: "2026-10-30", 확정일: "", 멘토: "크립톤", 주제: "원가표 · 측정 양식 점검", 상태: "요청", 받은피드백: "", 반영내용: "" },
+    { 회차: 2, 희망일: "2026-11-13", 확정일: "", 멘토: "크립톤", 주제: "최종 사업계획서 검토", 상태: "예정", 받은피드백: "", 반영내용: "" }
+  ],
+
+  // 예산 계획 — 계획액 = 단가 × 계획횟수. 항목 이름은 expenses 의 항목과 똑같이 적어야 집행액이 합쳐집니다 (예시 값)
+  budget: [
+    { 항목: "회의비 (식사)", 단가: 90000, 계획횟수: 6, 증빙유형: "영수증 + 회의록 + 참석자 명단", 메모: "3인 기준 1인 3만원. 날짜를 흩어서 집행" },
+    { 항목: "멘토링 간담회", 단가: 90000, 계획횟수: 2, 증빙유형: "영수증 + 멘토링 일지", 메모: "멘토 포함 4인" },
+    { 항목: "도서구입비", 단가: 90000, 계획횟수: 3, 증빙유형: "영수증 + 도서 목록", 메모: "브랜딩 · 마케팅 · 소상공인 정책" },
+    { 항목: "인터뷰 사례비", 단가: 60000, 계획횟수: 5, 증빙유형: "수령 확인서 + 인터뷰 기록", 메모: "소상공인 10명 × 3만원. 상품권이 인정 항목인지 크립톤 확인 필요" },
+    { 항목: "교육비", 단가: 90000, 계획횟수: 2, 증빙유형: "결제내역 + 수강 증빙", 메모: "온라인 강의 수강권" },
+    { 항목: "사무용품", 단가: 90000, 계획횟수: 2, 증빙유형: "영수증 + 물품 사진", 메모: "잉크 · 용지 · 문구류" },
+    { 항목: "인쇄 · 제본", 단가: 50000, 계획횟수: 2, 증빙유형: "영수증 + 산출물", 메모: "사업계획서 · 발표자료" },
+    { 항목: "홍보물 제작", 단가: 90000, 계획횟수: 1, 증빙유형: "영수증 + 시안", 메모: "리플렛 · 명함 · POP 시안" },
+    { 항목: "소프트웨어 구독", 단가: 80000, 계획횟수: 1, 증빙유형: "결제내역", 메모: "디자인 · 문서 도구" },
+    { 항목: "교통비", 단가: 80000, 계획횟수: 1, 증빙유형: "교통카드 내역 + 방문 기록", 메모: "강남구 현장 방문" }
+  ],
+
+  // 집행 내역 — 금액이 건당한도 이상이면 빨간 경고, 증빙확보 false 면 노란 경고, 같은 항목·같은 날 2건 이상이면 분할 결제 의심 (예시 값)
+  expenses: [
+    // 돈을 쓸 때마다 한 줄씩 추가하세요. 같은 날 같은 항목을 두 번 넣으면 「분할 결제 의심」이 뜹니다.
+    // { 일자: "2026-10-28", 항목: "회의비 (식사)", 내역: "팀 회의", 금액: 90000, 결제수단: "체크카드", 증빙확보: true, 담당: "t1" },
+  ],
+
+  // 산출물 — 상태가 "완료" 인 비율이 상단 KPI
+  deliverables: [
+    { 이름: "랜딩 페이지", 담당: "t2", 마감: "2026-10-22", 상태: "완료" },
+    { 이름: "측정 양식", 담당: "t3", 마감: "2026-10-21", 상태: "진행" },
+    { 이름: "MVP 웹", 담당: "t2", 마감: "2026-11-06", 상태: "진행" },
+    { 이름: "원가표", 담당: "t2", 마감: "2026-11-07", 상태: "대기" },
+    { 이름: "IP 검토 메모", 담당: "t1", 마감: "2026-11-17", 상태: "대기" },
+    { 이름: "운영 체크리스트", 담당: "t3", 마감: "2026-11-18", 상태: "대기" },
+    { 이름: "정산 증빙 묶음", 담당: "t1", 마감: "2026-11-21", 상태: "대기" },
+    { 이름: "최종 사업계획서", 담당: "t1", 마감: "2026-11-25", 상태: "대기" }
+  ],
+
+  // 실측 파일럿 — 단계마다 한 날짜(또는 "완료")를 적으면 체크 표시. 업체코드는 A~N 식 익명.
+  // K 곱창집 세팅 2026.9.1 · 재측정 2026.9.15 와 L·M 사전 진단은 프로젝트 컨텍스트 6절 실측. 나머지 칸은 아직 없음
+  pilot: [
+    { 업체코드: "K", 업종: "곱창집", 접촉일: "", 진단: "완료", 적용: "2026-09-01", 측정1차: "2026-09-01", 측정2차: "2026-09-15" },
+    { 업체코드: "L", 업종: "꽃집", 접촉일: "", 진단: "완료", 적용: "", 측정1차: "", 측정2차: "" },
+    { 업체코드: "M", 업종: "치킨집", 접촉일: "", 진단: "완료", 적용: "", 측정1차: "", 측정2차: "" },
+    { 업체코드: "", 업종: "", 접촉일: "", 진단: "", 적용: "", 측정1차: "", 측정2차: "" },
+    { 업체코드: "", 업종: "", 접촉일: "", 진단: "", 적용: "", 측정1차: "", 측정2차: "" },
+    { 업체코드: "", 업종: "", 접촉일: "", 진단: "", 적용: "", 측정1차: "", 측정2차: "" },
+    { 업체코드: "", 업종: "", 접촉일: "", 진단: "", 적용: "", 측정1차: "", 측정2차: "" },
+    { 업체코드: "", 업종: "", 접촉일: "", 진단: "", 적용: "", 측정1차: "", 측정2차: "" },
+    { 업체코드: "", 업종: "", 접촉일: "", 진단: "", 적용: "", 측정1차: "", 측정2차: "" },
+    { 업체코드: "", 업종: "", 접촉일: "", 진단: "", 적용: "", 측정1차: "", 측정2차: "" }
+  ],
+
+  // 1차 심사 의견 대응 — 크립톤 최종 심사 의견 (2026-10) 네 가지
+  feedback: [
+    { 지적사항: "기술적 진입장벽이 높지 않다. 경쟁사 대응·차별 요소·IP 확보 검토", 대응방안: "업종 사전 DB · 거부어 목록 자산화, 상표 출원 검토", 담당: "t1", 상태: "대기" },
+    { 지적사항: "검색 노출 개선과 매출 증대를 구분해 측정하라 (문의·방문, 구독 갱신)", 대응방안: "측정 양식을 노출 칸 / 결과 칸 두 줄로 분리", 담당: "t3", 상태: "진행" },
+    { 지적사항: "원가 구조를 정리하라 (API 비용, 문구 검수, 세팅 지원 시간)", 대응방안: "원가표 1장 — 호출 1회당 API 비용 실측", 담당: "t2", 상태: "대기" },
+    { 지적사항: "대표 현장 지원 없이도 같은 성과를 내는 운영 체계", 대응방안: "운영 체크리스트 · 품질 기준 문서화", 담당: "t3", 상태: "대기" }
+  ]
+};
+</script>
+<style>
+  /* 색은 아래 5개만. 글자는 검정·회색, 색은 점과 막대가 맡는다 */
+  :root {
+    --main: #22946A;
+    --point: #C27A0E;
+    --deep: #0B3D2E;
+    --mist: #DDEDE4;
+    --warn: #C9543B;
+    --text: #1A1A1A;
+    --sub: #5C5C5C;
+    --line: #D9D9D9;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: #FFFFFF;
+    color: var(--text);
+    font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+    word-break: keep-all;
+  }
+  .wrap { max-width: 1400px; margin: 0 auto; padding: 0 24px 64px; }
+  header.top { background: var(--deep); color: #FFFFFF; }
+  header.top .wrap { padding-top: 22px; padding-bottom: 22px; display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; flex-wrap: wrap; }
+  header.top h1 { margin: 0; font-size: 24px; }
+  header.top p { margin: 4px 0 0; font-size: 14px; color: #FFFFFF; opacity: 0.85; }
+  .sample-tag { display: inline-block; margin-left: 10px; padding: 2px 10px; border: 1px solid #FFFFFF; border-radius: 999px; font-size: 12px; vertical-align: middle; }
+  h2 { font-size: 19px; margin: 40px 0 14px; display: flex; align-items: baseline; gap: 12px; }
+  h2 small { font-size: 13px; color: var(--sub); font-weight: normal; }
+  .muted { color: var(--sub); }
+  .empty { color: var(--sub); font-size: 13px; }
+
+  /* KPI */
+  .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-top: 24px; }
+  .kpi { border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; background: #FFFFFF; }
+  .kpi .label { font-size: 13px; color: var(--sub); display: flex; align-items: center; gap: 8px; }
+  .kpi .value { font-size: 32px; font-weight: 800; margin-top: 6px; letter-spacing: -0.5px; }
+  .kpi .detail { font-size: 13px; color: var(--sub); margin-top: 2px; }
+  .meter { height: 8px; background: var(--mist); border-radius: 4px; margin-top: 12px; overflow: hidden; }
+  .meter > span { display: block; height: 100%; background: var(--main); }
+  .meter.over > span { background: var(--warn); }
+
+  /* 경고 */
+  .alerts { margin-top: 20px; display: grid; gap: 10px; }
+  .alert { border-radius: 10px; padding: 12px 16px; border-left: 6px solid; background: #FFFFFF; border-top: 1px solid var(--line); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .alert.red { border-left-color: var(--warn); }
+  .alert.yellow { border-left-color: var(--point); }
+  .alert strong { display: block; margin-bottom: 2px; }
+  .alert ul { margin: 4px 0 0; padding-left: 18px; }
+
+  /* 점 */
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: none; }
+
+  /* 일정 */
+  .panel { border: 1px solid var(--line); border-radius: 12px; padding: 16px; background: #FFFFFF; }
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: 13px; color: var(--sub); margin-top: 10px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  svg text { font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; }
+
+  /* 보드 */
+  .board { display: grid; grid-template-columns: repeat(var(--cols, 3), minmax(0, 1fr)); gap: 16px; }
+  .partners { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+  .partner { border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; background: #FFFFFF; border-left: 6px solid var(--deep); }
+  .partner h3 { margin: 0; font-size: 17px; display: flex; align-items: center; gap: 10px; }
+  .partner .type { font-size: 12px; font-weight: 700; border: 1px solid var(--deep); border-radius: 999px; padding: 1px 9px; color: var(--text); }
+  .partner dl { margin: 10px 0 0; display: grid; grid-template-columns: 72px 1fr; gap: 4px 10px; font-size: 14px; }
+  .partner dt { color: var(--sub); }
+  .partner dd { margin: 0; }
+  .col { background: var(--mist); border-radius: 12px; padding: 14px; }
+  .col h3 { margin: 0 0 2px; font-size: 16px; }
+  .col .role { font-size: 13px; color: var(--sub); margin-bottom: 12px; }
+  .card { background: #FFFFFF; border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
+  .card.late { border: 2px solid var(--warn); }
+  .card .t { font-weight: 700; display: flex; gap: 8px; align-items: baseline; }
+  .card .t .dot { position: relative; top: 1px; }
+  .card .m { font-size: 13px; color: var(--sub); margin-top: 4px; }
+
+  /* 표 */
+  table { width: 100%; border-collapse: collapse; font-size: 14px; background: #FFFFFF; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 13px; color: var(--sub); font-weight: 700; background: #FFFFFF; border-bottom: 2px solid var(--line); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.c, th.c { text-align: center; }
+  tfoot td { font-weight: 800; border-top: 2px solid var(--line); border-bottom: none; }
+  tr.flag td { background: #FFFFFF; }
+  .tag { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .check { font-weight: 800; }
+  .pilot-big { font-size: 40px; font-weight: 800; line-height: 1; }
+
+  @media (max-width: 1180px) {
+    .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+
+.panel a[target="_blank"]{display:inline-block;padding:9px 14px;border:1px solid #DDEDE4;border-radius:8px;background:#F6FBF8;color:#0B3D2E;text-decoration:none;font-size:14px;font-weight:600}
+.panel a[target="_blank"]:hover{background:#DDEDE4}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div>
+      <h1 id="title"></h1>
+      <p id="subtitle"></p>
+    </div>
+    <p id="today"></p>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="kpis" id="kpis"></section>
+
+  <h2>주차별 일정 <small id="tl-note"></small></h2>
+  <div class="panel">
+    <div id="timeline"></div>
+    <div class="legend" id="tl-legend"></div>
+  </div>
+
+  <section class="alerts" id="alerts"></section>
+
+  <h2>담당자별 업무</h2>
+  <section class="board" id="board"></section>
+
+  <h2>파트너사 <small>함께 일하는 기관</small></h2>
+  <section class="partners" id="partners"></section>
+
+  <h2>예산 <small id="budget-note"></small></h2>
+  <div class="panel">
+    <div id="budget-chart"></div>
+    <div class="legend" id="budget-legend"></div>
+  </div>
+  <div class="panel" style="margin-top:16px; padding:0 0 4px;">
+    <table id="expense-table"></table>
+  </div>
+
+  <h2>실측 파일럿 <small id="pilot-note"></small></h2>
+  <div class="panel" style="padding:0 0 4px;">
+    <table id="pilot-table"></table>
+  </div>
+
+  <h2>1차 심사 의견 대응</h2>
+  <div class="panel" style="padding:0 0 4px;">
+    <table id="feedback-table"></table>
+  </div>
+
+  <h2>공유 폴더 <small>구글 드라이브 · 팀원 확정 후 공유</small></h2>
+  <div class="panel">
+    <div style="display:flex; flex-wrap:wrap; gap:10px;">
+      <a href="https://drive.google.com/drive/folders/1UZr_66CwQb2ZHe7-8oX83c0r7SqofpOq" target="_blank">01_사업계획서</a>
+      <a href="https://drive.google.com/drive/folders/1OwZC93zXPX3U5HSR70riSlrfA19q_yVO" target="_blank">02_멘토링</a>
+      <a href="https://drive.google.com/drive/folders/15eDmX9WK0qsc1rNvOD911BG5ON1-ZVLh" target="_blank">03_파일럿_10곳</a>
+      <a href="https://drive.google.com/drive/folders/1nqx0vqKrAPwvjpc5eRdbseIl3YImuTWf" target="_blank">04_정산증빙</a>
+      <a href="https://drive.google.com/drive/folders/1WyJ1f7N6kxbIxLzJAwvSXNj_MSlZ2RC9" target="_blank">05_산출물</a>
+      <a href="https://drive.google.com/drive/folders/1m3tnKo8tYQMT-3swtxVGL8y9S8WU7_pc" target="_blank">06_공유자료</a>
+    </div>
+    <p style="margin:14px 0 0; font-size:13px; color:#555;">영수증 파일명 규칙 &mdash; <b>20261028_회의비_90000.jpg</b> (날짜_항목_금액). 이 규칙을 지켜야 11월 말 정산이 한 번에 끝납니다.</p>
+  </div>
+</main>
+
+<script>
+/* ════════════ 아래는 그리는 코드. 숫자를 바꾸려면 위 DATA 만 고치세요 ════════════ */
+
+// 상태 색 — 위치나 순서가 아니라 상태 이름에 고정
+const STATUS_COLOR = { "완료": "#22946A", "진행": "#C27A0E", "지연": "#C9543B", "대기": "#DDEDE4" };
+const statusDot = (s) => `<span class="dot" style="background:${STATUS_COLOR[s] || "#DDEDE4"};${s === "대기" || !STATUS_COLOR[s] ? "box-shadow:inset 0 0 0 1px #5C5C5C;" : ""}"></span>`;
+
+const DAY = 86400000;
+const toDate = (s) => (s ? new Date(s + "T00:00:00") : null);
+const fmtDate = (s) => { const d = toDate(s); return d ? `${d.getMonth() + 1}/${d.getDate()}` : ""; };
+const won = (n) => `${Math.round(n).toLocaleString("ko-KR")}원`;
+const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const orMissing = (v) => (v === "" || v === null || v === undefined ? `<span class="empty">미확보</span>` : esc(v));
+const displayName = (m) => m.이름 || `${m.역할} (이름 미확보)`;
+const memberName = (id) => { const m = DATA.team.find((t) => t.id === id); return m ? displayName(m) : id || ""; };
+
+const M = DATA.meta;
+const today = M.기준일 ? toDate(M.기준일) : new Date(new Date().toDateString());
+const isLate = (t) => t.상태 !== "완료" && toDate(t.마감) && toDate(t.마감) < today;
+const taskStatus = (t) => (isLate(t) ? "지연" : t.상태);
+
+/* ── 머리 ── */
+document.getElementById("title").innerHTML = `${esc(M.아이템)} 운영 대시보드${M.샘플데이터 ? '<span class="sample-tag">예시 데이터 포함</span>' : ""}`;
+document.getElementById("subtitle").textContent = `${M.팀명} · 최종 사업계획서 제출 ${M.마감일}`;
+document.getElementById("today").textContent = `기준일 ${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+
+/* ── 1) KPI ── */
+(function kpis() {
+  const dleft = Math.round((toDate(M.마감일) - today) / DAY);
+  const spent = DATA.expenses.reduce((s, e) => s + e.금액, 0);
+  const done = DATA.deliverables.filter((d) => d.상태 === "완료").length;
+  const measured = DATA.pilot.filter((p) => p.측정1차).length;
+  const cards = [
+    { label: "마감까지", value: dleft >= 0 ? `D-${dleft}` : `D+${-dleft}`, detail: `${M.마감일} 최종 사업계획서`, meter: null },
+    { label: "예산 집행률", value: `${pct(spent, M.총예산)}%`, detail: `${won(spent)} 집행 · 잔액 ${won(M.총예산 - spent)}`, meter: spent / M.총예산 },
+    { label: "산출물 완료율", value: `${pct(done, DATA.deliverables.length)}%`, detail: `${done} / ${DATA.deliverables.length}건 완료`, meter: DATA.deliverables.length ? done / DATA.deliverables.length : 0 },
+    { label: "파일럿 진행 (측정 1차까지)", value: `${measured} / ${DATA.pilot.length}`, detail: "측정 1차를 마친 매장 수", meter: DATA.pilot.length ? measured / DATA.pilot.length : 0 }
+  ];
+  document.getElementById("kpis").innerHTML = cards.map((c) => `
+    <div class="kpi">
+      <div class="label">${esc(c.label)}</div>
+      <div class="value">${esc(c.value)}</div>
+      <div class="detail">${esc(c.detail)}</div>
+      ${c.meter === null ? "" : `<div class="meter ${c.meter > 1 ? "over" : ""}"><span style="width:${Math.min(100, c.meter * 100).toFixed(1)}%"></span></div>`}
+    </div>`).join("");
+})();
+
+/* ── 2) 경고 ── */
+(function alerts() {
+  const out = [];
+  const over = DATA.expenses.filter((e) => e.금액 >= M.건당한도);
+  if (over.length) out.push({ cls: "red", title: `건당 한도 초과 ${over.length}건 (한도 ${won(M.건당한도)} 미만)`, items: over.map((e) => `${fmtDate(e.일자)} · ${e.항목} · ${e.내역} · ${won(e.금액)}`) });
+
+  // 같은 항목을 같은 날 2건 이상 — 정산에서 가장 많이 걸린다
+  const groups = {};
+  DATA.expenses.forEach((e) => { const k = `${e.일자}|${e.항목}`; (groups[k] = groups[k] || []).push(e); });
+  const split = Object.values(groups).filter((g) => g.length >= 2);
+  if (split.length) out.push({ cls: "red", title: `분할 결제 의심 ${split.length}건`, items: split.map((g) => `${fmtDate(g[0].일자)} · ${g[0].항목} · ${g.length}건 · 합계 ${won(g.reduce((s, e) => s + e.금액, 0))}`) });
+
+  const late = DATA.tasks.filter(isLate);
+  if (late.length) out.push({ cls: "red", title: `지연 ${late.length}건 (마감이 지났는데 완료되지 않음)`, items: late.map((t) => `${t.제목} · ${memberName(t.담당)} · 마감 ${fmtDate(t.마감)}`) });
+
+  const noProof = DATA.expenses.filter((e) => !e.증빙확보);
+  if (noProof.length) out.push({ cls: "yellow", title: `증빙 미확보 ${noProof.length}건`, items: noProof.map((e) => `${fmtDate(e.일자)} · ${e.항목} · ${e.내역}`) });
+
+  const unconfirmed = DATA.mentoring.filter((m) => !m.확정일);
+  unconfirmed.forEach((m) => out.push({ cls: "yellow", title: `멘토링 ${m.회차}회차 일정 미확정`, items: [`희망일 ${m.희망일 ? fmtDate(m.희망일) : "미확보"} · ${m.멘토} · ${m.주제}`] }));
+
+  document.getElementById("alerts").innerHTML = out.map((a) => `
+    <div class="alert ${a.cls}"><strong>${esc(a.title)}</strong><ul>${a.items.map((i) => `<li>${esc(i)}</li>`).join("")}</ul></div>`).join("");
+})();
+
+/* ── 3) 주차별 일정 (SVG) ── */
+(function timeline() {
+  const start = toDate(M.시작일), end = toDate(M.마감일);
+  const days = Math.round((end - start) / DAY) + 1;
+  const W = 1340, LABEL = 150, PAD_R = 24, HEAD = 82, ROW = 44, LANE_PAD = 10;
+  const plotW = W - LABEL - PAD_R;
+  const x = (d) => LABEL + ((d - start) / DAY / days) * plotW;
+  const charW = 13; // 한글 13px 글자 폭 근사
+
+  // 담당자별 레인 — 겹치는 막대는 줄을 나눠 쌓는다 (막대 + 제목 글자 폭까지 겹침으로 본다)
+  const lanes = DATA.team.map((m) => {
+    const ts = DATA.tasks.filter((t) => t.담당 === m.id).sort((a, b) => toDate(a.시작) - toDate(b.시작));
+    const rows = [];
+    ts.forEach((t) => {
+      const s = new Date(Math.max(toDate(t.시작), start)), e = new Date(Math.min(toDate(t.마감), end));
+      const x0 = x(s), x1 = Math.max(x(new Date(+e + DAY)), x0 + 6);
+      const right = Math.max(x1, x0 + t.제목.length * charW * 0.92 + 8);
+      let r = rows.findIndex((row) => row.every((it) => it.right + 6 < x0 || it.x0 > right + 6));
+      if (r < 0) { rows.push([]); r = rows.length - 1; }
+      rows[r].push({ t, x0, x1, right });
+    });
+    return { m, rows: rows.length ? rows : [[]] };
+  });
+
+  const height = HEAD + lanes.reduce((h, l) => h + l.rows.length * ROW + LANE_PAD * 2, 0) + 10;
+  const parts = [];
+
+  // 주 단위 칸
+  for (let i = 0, d = new Date(start); d <= end; i++, d = new Date(+d + 7 * DAY)) {
+    const we = new Date(Math.min(+d + 6 * DAY, +end));
+    const x0 = x(d), x1 = x(new Date(+we + DAY));
+    if (i % 2 === 0) parts.push(`<rect x="${x0}" y="${HEAD - 8}" width="${x1 - x0}" height="${height - HEAD}" fill="#DDEDE4" opacity="1" />`);
+    parts.push(`<text x="${(x0 + x1) / 2}" y="22" text-anchor="middle" font-size="13" font-weight="700" fill="#1A1A1A">${i + 1}주차</text>`);
+    parts.push(`<text x="${(x0 + x1) / 2}" y="40" text-anchor="middle" font-size="12" fill="#5C5C5C">${d.getMonth() + 1}/${d.getDate()} ~ ${we.getMonth() + 1}/${we.getDate()}</text>`);
+  }
+
+  // 세로 기준선은 막대·글자보다 먼저 그려 뒤로 보낸다 (아래 vline 이 이 자리에 끼워 넣는다)
+  const behindAt = parts.length;
+  const behind = [];
+
+  // 레인
+  let y = HEAD;
+  lanes.forEach((lane, li) => {
+    const h = lane.rows.length * ROW + LANE_PAD * 2;
+    parts.push(`<line x1="0" x2="${W}" y1="${y + h}" y2="${y + h}" stroke="#D9D9D9" />`);
+    parts.push(`<text x="8" y="${y + LANE_PAD + 20}" font-size="14" font-weight="700" fill="#1A1A1A">${esc(displayName(lane.m))}</text>`);
+    parts.push(`<text x="8" y="${y + LANE_PAD + 38}" font-size="12" fill="#5C5C5C">${esc(lane.m.역할)}</text>`);
+    lane.rows.forEach((row, ri) => {
+      const ry = y + LANE_PAD + ri * ROW;
+      row.forEach(({ t, x0, x1 }) => {
+        const st = taskStatus(t);
+        parts.push(`<text x="${x0 + 1}" y="${ry + 14}" font-size="13" fill="#1A1A1A" stroke="#FFFFFF" stroke-width="4" stroke-linejoin="round" paint-order="stroke">${esc(t.제목)}</text>`);
+        parts.push(`<rect x="${x0}" y="${ry + 20}" width="${x1 - x0}" height="14" rx="4" fill="${STATUS_COLOR[st]}" ${st === "대기" ? 'stroke="#5C5C5C" stroke-width="1"' : ""} ${st === "지연" ? 'stroke="#C9543B" stroke-width="2"' : ""}><title>${esc(t.제목)} · ${st} · ${fmtDate(t.시작)}~${fmtDate(t.마감)}</title></rect>`);
+      });
+    });
+    y += h;
+  });
+
+  // 세로 기준선 — 기준일, 멘토링, 최종 제출
+  // anchor "end" 면 글자를 선 왼쪽에 둔다 (오른쪽 끝에서 잘리지 않게)
+  const vline = (d, color, dash, label, row, anchor = "start") => {
+    if (!d || d < start || d > end) return;
+    const xx = x(d) + (plotW / days) / 2;
+    behind.push(`<line x1="${xx}" x2="${xx}" y1="${HEAD - 16}" y2="${height - 4}" stroke="${color}" stroke-width="2" ${dash ? 'stroke-dasharray="5 4"' : ""} />`);
+    parts.push(`<text x="${anchor === "end" ? xx - 5 : xx + 5}" y="${HEAD - 22}" text-anchor="${anchor}" font-size="12" font-weight="700" fill="#1A1A1A">${esc(label)}</text>`);
+  };
+  vline(today, "#5C5C5C", true, "기준일", 0);
+  DATA.mentoring.forEach((m) => vline(toDate(m.확정일 || m.희망일), "#C27A0E", !m.확정일, `멘토링 ${m.회차}회차${m.확정일 ? "" : " (희망)"}`, 1));
+  vline(end, "#0B3D2E", false, "최종 제출", 0, "end");
+
+  parts.splice(behindAt, 0, ...behind);
+  document.getElementById("timeline").innerHTML = `<svg viewBox="0 0 ${W} ${height}" width="100%" role="img" aria-label="주차별 일정">${parts.join("")}</svg>`;
+  document.getElementById("tl-note").textContent = `${fmtDate(M.시작일)} ~ ${fmtDate(M.마감일)}, 담당자별 한 줄`;
+  document.getElementById("tl-legend").innerHTML =
+    ["완료", "진행", "지연", "대기"].map((s) => `<span>${statusDot(s)} ${s}</span>`).join("") +
+    `<span><svg width="22" height="10"><line x1="0" x2="22" y1="5" y2="5" stroke="#C27A0E" stroke-width="2" /></svg> 멘토링 (점선은 희망일)</span>` +
+    `<span><svg width="22" height="10"><line x1="0" x2="22" y1="5" y2="5" stroke="#0B3D2E" stroke-width="2" /></svg> 최종 제출</span>` +
+    `<span><svg width="22" height="10"><line x1="0" x2="22" y1="5" y2="5" stroke="#5C5C5C" stroke-width="2" stroke-dasharray="5 4" /></svg> 기준일</span>`;
+})();
+
+/* ── 4) 담당자별 업무 보드 ── */
+(function board() {
+  const order = { "지연": 0, "진행": 1, "대기": 2, "완료": 3 };
+  document.getElementById("board").style.setProperty("--cols", DATA.team.length);
+  document.getElementById("board").innerHTML = DATA.team.map((m) => {
+    const ts = DATA.tasks.filter((t) => t.담당 === m.id).sort((a, b) => order[taskStatus(a)] - order[taskStatus(b)] || toDate(a.마감) - toDate(b.마감));
+    return `<div class="col">
+      <h3>${m.이름 ? esc(m.이름) : '<span class="empty">이름 미확보</span>'}</h3>
+      <div class="role">${[esc(m.역할), m.담당영역.map(esc).join(", ")].filter(Boolean).join(" · ")}</div>
+      ${ts.length ? ts.map((t) => {
+        const st = taskStatus(t);
+        return `<div class="card ${st === "지연" ? "late" : ""}">
+          <div class="t">${statusDot(st)}<span>${esc(t.제목)}</span></div>
+          <div class="m">${esc(st)} · 마감 ${fmtDate(t.마감)} · 산출물 ${t.산출물 ? esc(t.산출물) : '<span class="empty">미확보</span>'}</div>
+          ${t.메모 ? `<div class="m">${esc(t.메모)}</div>` : ""}
+        </div>`;
+      }).join("") : '<div class="empty">할 일 없음</div>'}
+    </div>`;
+  }).join("");
+})();
+
+/* ── 5) 예산 — 항목별 계획 대비 집행 가로 막대 + 집행 내역 표 ── */
+(function budget() {
+  const rows = DATA.budget.map((b) => {
+    const plan = b.단가 * b.계획횟수;
+    const spent = DATA.expenses.filter((e) => e.항목 === b.항목).reduce((s, e) => s + e.금액, 0);
+    return { name: b.항목, plan, spent };
+  });
+  // 계획에 없는 항목으로 집행한 것도 막대로 보여 준다
+  DATA.expenses.forEach((e) => { if (!rows.find((r) => r.name === e.항목)) rows.push({ name: e.항목, plan: 0, spent: e.금액, extra: true }); });
+
+  const W = 1340, LABEL = 160, VAL = 250, BAR_H = 16, ROW = 34, TOP = 6;
+  const plotW = W - LABEL - VAL;
+  const max = Math.max(1, ...rows.map((r) => Math.max(r.plan, r.spent)));
+  const sx = (v) => (v / max) * plotW;
+  const parts = [];
+  rows.forEach((r, i) => {
+    const y = TOP + i * ROW;
+    parts.push(`<text x="0" y="${y + 13}" font-size="13" fill="#1A1A1A">${esc(r.name)}${r.extra ? " (계획 없음)" : ""}</text>`);
+    // 계획 = 연한 면, 집행 = 메인 (계획을 넘으면 넘은 부분은 경고색)
+    parts.push(`<rect x="${LABEL}" y="${y}" width="${Math.max(sx(r.plan), 0)}" height="${BAR_H}" rx="3" fill="#DDEDE4" />`);
+    const within = Math.min(r.spent, r.plan);
+    if (within > 0) parts.push(`<rect x="${LABEL}" y="${y}" width="${sx(within)}" height="${BAR_H}" rx="3" fill="#22946A" />`);
+    if (r.spent > r.plan) parts.push(`<rect x="${LABEL + sx(r.plan)}" y="${y}" width="${sx(r.spent - r.plan)}" height="${BAR_H}" rx="3" fill="#C9543B" />`);
+    parts.push(`<text x="${W}" y="${y + 13}" font-size="13" text-anchor="end" fill="#1A1A1A">${won(r.spent)} <tspan fill="#5C5C5C">/ 계획 ${won(r.plan)}</tspan></text>`);
+  });
+  document.getElementById("budget-chart").innerHTML = `<svg viewBox="0 0 ${W} ${TOP + rows.length * ROW}" width="100%" role="img" aria-label="항목별 계획 대비 집행">${parts.join("")}</svg>`;
+  document.getElementById("budget-legend").innerHTML =
+    `<span><span class="dot" style="background:#DDEDE4;border-radius:2px;box-shadow:inset 0 0 0 1px #5C5C5C"></span> 계획액 (단가 × 횟수)</span>` +
+    `<span><span class="dot" style="background:#22946A;border-radius:2px"></span> 집행액</span>` +
+    `<span><span class="dot" style="background:#C9543B;border-radius:2px"></span> 계획 초과분</span>`;
+
+  const planTotal = rows.reduce((s, r) => s + r.plan, 0);
+  document.getElementById("budget-note").textContent = `총예산 ${won(M.총예산)} · 계획 합계 ${won(planTotal)} · 건당 ${won(M.건당한도)} 미만`;
+
+  const spent = DATA.expenses.reduce((s, e) => s + e.금액, 0);
+  const sameDay = (e) => DATA.expenses.filter((o) => o.일자 === e.일자 && o.항목 === e.항목).length >= 2;
+  const ex = [...DATA.expenses].sort((a, b) => toDate(a.일자) - toDate(b.일자));
+  document.getElementById("expense-table").innerHTML = `
+    <thead><tr><th>일자</th><th>항목</th><th>내역</th><th class="num">금액</th><th>결제수단</th><th class="c">증빙</th><th>담당</th><th>확인</th></tr></thead>
+    <tbody>${ex.map((e) => {
+      const flags = [];
+      if (e.금액 >= M.건당한도) flags.push(`<span class="tag">${statusDot("지연")} 한도 초과</span>`);
+      if (sameDay(e)) flags.push(`<span class="tag">${statusDot("지연")} 분할 의심</span>`);
+      if (!e.증빙확보) flags.push(`<span class="tag">${statusDot("진행")} 증빙 없음</span>`);
+      return `<tr>
+        <td>${orMissing(e.일자)}</td><td>${orMissing(e.항목)}</td><td>${orMissing(e.내역)}</td>
+        <td class="num">${won(e.금액)}</td><td>${orMissing(e.결제수단)}</td>
+        <td class="c">${e.증빙확보 ? '<span class="check">✓</span>' : '<span class="empty">미확보</span>'}</td>
+        <td>${esc(memberName(e.담당))}</td><td>${flags.join(" ")}</td></tr>`;
+    }).join("")}</tbody>
+    <tfoot>
+      <tr><td colspan="3">집행 합계</td><td class="num">${won(spent)}</td><td colspan="4"></td></tr>
+      <tr><td colspan="3">잔액 (총예산 ${won(M.총예산)})</td><td class="num">${won(M.총예산 - spent)}</td><td colspan="4"></td></tr>
+    </tfoot>`;
+})();
+
+/* ── 6) 실측 파일럿 ── */
+(function pilot() {
+  const steps = ["진단", "적용", "측정1차", "측정2차"];
+  const cell = (v) => (v ? `<span class="check">✓</span> <span class="muted">${/^\d{4}-/.test(v) ? fmtDate(v) : esc(v)}</span>` : '<span class="empty">미확보</span>');
+  const count = (k) => DATA.pilot.filter((p) => p[k]).length;
+  document.getElementById("pilot-note").textContent = "2차 심사 증빙의 핵심 — 업체명은 알파벳 익명";
+  document.getElementById("pilot-table").innerHTML = `
+    <thead>
+      <tr><th style="width:120px">업체코드</th><th>업종</th><th>접촉일</th>${steps.map((s) => `<th class="c">${s}</th>`).join("")}</tr>
+    </thead>
+    <tbody>${DATA.pilot.map((p) => `<tr>
+      <td><strong>${orMissing(p.업체코드)}</strong></td><td>${orMissing(p.업종)}</td><td>${p.접촉일 ? fmtDate(p.접촉일) : '<span class="empty">미확보</span>'}</td>
+      ${steps.map((s) => `<td class="c">${cell(p[s])}</td>`).join("")}</tr>`).join("")}</tbody>
+    <tfoot><tr>
+      <td colspan="3">완료 건수 (전체 ${DATA.pilot.length}건)</td>
+      ${steps.map((s) => `<td class="c"><span class="pilot-big">${count(s)}</span><div class="muted" style="font-weight:normal;font-size:12px;margin-top:4px">${s}</div></td>`).join("")}
+    </tr></tfoot>`;
+})();
+
+/* ── 파트너사 ── */
+(function partners() {
+  document.getElementById("partners").innerHTML = DATA.partners.length
+    ? DATA.partners.map((p) => `<div class="partner">
+        <h3>${orMissing(p.이름)}${p.유형 ? `<span class="type">${esc(p.유형)}</span>` : ""}</h3>
+        <dl>
+          <dt>협력내용</dt><dd>${orMissing(p.협력내용)}</dd>
+          <dt>연락 담당</dt><dd>${p.연락담당 ? esc(memberName(p.연락담당)) : '<span class="empty">미확보</span>'}</dd>
+          ${p.메모 ? `<dt>메모</dt><dd>${esc(p.메모)}</dd>` : ""}
+        </dl>
+      </div>`).join("")
+    : '<div class="empty">파트너사 없음</div>';
+})();
+
+/* ── 7) 1차 심사 의견 대응 ── */
+(function feedback() {
+  document.getElementById("feedback-table").innerHTML = `
+    <thead><tr><th style="width:38%">지적사항</th><th>대응방안</th><th style="width:110px">담당</th><th style="width:90px">상태</th></tr></thead>
+    <tbody>${DATA.feedback.map((f) => `<tr>
+      <td>${orMissing(f.지적사항)}</td><td>${orMissing(f.대응방안)}</td><td>${esc(memberName(f.담당))}</td>
+      <td><span class="tag">${statusDot(f.상태)} ${esc(f.상태)}</span></td></tr>`).join("")}</tbody>`;
+})();
+</script>
+</body>
+</html>
